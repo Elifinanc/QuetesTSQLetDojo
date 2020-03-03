@@ -1,0 +1,138 @@
+CREATE DATABASE Multinationale;
+USE Multinationale;
+
+CREATE TABLE [Address] (
+	address_id INT PRIMARY KEY IDENTITY (1,1),
+	street_number INT NOT NULL,
+	street_name VARCHAR(200) NOT NULL,
+	zipcode INT NOT NULL
+	);
+
+CREATE TABLE Succursale (
+	succursale_id INT PRIMARY KEY IDENTITY (1,1),
+	FK_address_id INT,
+	CONSTRAINT FK_address_id FOREIGN KEY (FK_address_id) REFERENCES [Address](address_id)
+	);
+
+CREATE TABLE [Function](
+	function_id INT PRIMARY KEY IDENTITY(1,1),
+	[name] VARCHAR(20),
+	base_salary INT NOT NULL
+	);
+
+CREATE TABLE Employee(
+	employee_id INT PRIMARY KEY IDENTITY(1,1),
+	[name] VARCHAR(25) NOT NULL,
+	[age] INT NOT NULL,
+	years_worked INT,
+	FK_superior_id INT,
+	FOREIGN KEY (FK_superior_id) REFERENCES Employee(employee_id),
+	FK_function_id INT,
+	FOREIGN KEY (FK_function_id) REFERENCES [Function](function_id),
+	FK_succursale_id INT,
+	FOREIGN KEY (FK_succursale_id) REFERENCES Succursale(succursale_id)
+	);
+
+
+INSERT INTO [Function] ([name], base_salary) VALUES ('Gourou', 20000),
+													('Prêcheur', 10000),
+													('Recruteur',10000),
+													('Croyant', 1000),
+													('Comptable', 15000)
+
+INSERT INTO [Address] (street_number,street_name,zipcode) VALUES
+(1, 'rue du Concombre', 12531),
+(2, 'rue du Cornichon', 68546),
+(3, 'rue du Concombre de mer', 34001),
+(4, 'rue de la Courgette', 55432),
+(5,'rue de la Pastèque',69121)
+
+INSERT INTO Succursale (FK_address_id) VALUES
+(1),(2),(3),(4),(5)
+
+TRUNCATE TABLE Employee
+
+INSERT INTO Employee ([name],[age], years_worked, FK_superior_id,FK_function_id,FK_succursale_id)
+VALUES ('Raël',45, 30, 1, 1, 1)
+
+DECLARE @EmployeeCounter INT =1, @NbSuccursale INT=1, @NbFunction INT =1
+
+WHILE @EmployeeCounter<=250 AND @NbSuccursale>0 AND @NbFunction>0
+BEGIN
+DECLARE @superior INT
+SELECT @superior = employee_id FROM Employee ORDER BY NEWID()
+DECLARE @function INT
+SELECT @function=function_id FROM [Function] ORDER BY NEWID()
+DECLARE @succursale INT
+SELECT @succursale =succursale_id FROM Succursale ORDER BY NEWID()
+
+	INSERT INTO Employee ([name],[age], years_worked, FK_superior_id,FK_function_id,FK_succursale_id)
+	VALUES (CONCAT('Skippy',@EmployeeCounter), FLOOR(RAND()*(70-20)+20), FLOOR(RAND()*(30-1)+1), @superior, @function,@succursale);
+
+	UPDATE Employee SET years_worked = ((SELECT age FROM Employee WHERE employee_id =@EmployeeCounter) -20 ) WHERE employee_id =@EmployeeCounter
+
+	SET @EmployeeCounter=@EmployeeCounter+1
+	
+	SELECT COUNT(employee_id)
+	FROM Employee
+	GROUP BY FK_succursale_id
+	HAVING COUNT(employee_id)<50
+	SELECT @NbSuccursale = @@ROWCOUNT
+
+	SELECT COUNT(employee_id)
+	FROM Employee
+	GROUP BY FK_function_id
+	HAVING COUNT(employee_id)<50
+	SELECT @NbFunction=@@ROWCOUNT
+END
+
+
+
+
+
+DROP PROCEDURE IF EXISTS sp_ActualSalaryCalculator 
+GO
+CREATE PROCEDURE sp_ActualSalaryCalculator
+@employeeId INT,
+@actualsalary INT OUTPUT
+AS
+BEGIN
+DECLARE @yearsWorked INT
+SELECT @yearsWorked = years_worked FROM Employee AS e WHERE employee_id = @employeeId
+DECLARE @baseSalary INT
+SELECT @baseSalary = base_salary FROM Employee AS e INNER JOIN [Function] AS f ON e.FK_function_id= f.function_id WHERE employee_id = @employeeId
+SET @actualsalary = @baseSalary + 0.1*@baseSalary*(@yearsWorked/3)
+END
+GO
+
+DECLARE @newactualsalary INT
+EXECUTE sp_ActualSalaryCalculator
+         @employeeId = 6,
+         @actualsalary = @newactualsalary OUTPUT
+PRINT @newactualsalary
+GO
+
+
+
+
+
+DROP PROCEDURE IF EXISTS sp_GetAllSuperiors 
+GO
+CREATE PROCEDURE sp_GetAllSuperiors
+	@employeeID INT
+AS
+BEGIN
+	DECLARE @superior INT 
+	SELECT @superior = FK_superior_id FROM Employee WHERE employee_id = @employeeID
+
+	IF @superior != 1
+		BEGIN
+			EXECUTE sp_GetAllSuperiors
+				@employeeID = @superior 
+		END
+	PRINT @superior
+END
+GO
+
+EXECUTE sp_GetAllSuperiors
+	@employeeID = 6
