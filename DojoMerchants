@@ -1,0 +1,204 @@
+DROP DATABASE IF EXISTS Marchands
+GO
+
+CREATE DATABASE Marchands
+GO
+
+USE Marchands
+GO
+
+CREATE TABLE Countries (
+Code INT PRIMARY KEY IDENTITY (1,1),
+"name" VARCHAR (80),
+Continent_name VARCHAR(50) NOT NULL
+)
+GO
+
+CREATE TABLE Users (
+"User_id" INT PRIMARY KEY IDENTITY(1,1),
+Full_name VARCHAR(50),
+e_mail VARCHAR (50),
+gender VARCHAR(30),
+DateOfBirth VARCHAR(30),
+FK_Country_code INT,
+FOREIGN KEY (FK_Country_Code) REFERENCES Countries(Code),
+Created_at VARCHAR(30)
+)
+GO
+
+CREATE TABLE Merchants (
+Merchant_id INT PRIMARY KEY IDENTITY (1,1),
+"name" VARCHAR(200),
+FK_Admin_id INT,
+FOREIGN KEY (FK_Admin_id) REFERENCES Users("User_id"),
+FK_Country_code INT,
+FOREIGN KEY (FK_Country_Code) REFERENCES Countries(Code),
+Created_at VARCHAR(30)
+)
+GO
+
+CREATE TABLE Products (
+Product_id INT PRIMARY KEY IDENTITY (1,1),
+FK_Merchant_id INT,
+FOREIGN KEY (FK_Merchant_id) REFERENCES Merchants(Merchant_id),
+"name" VARCHAR (200),
+Price INT,
+"Status" VARCHAR(50),
+Created_at VARCHAR(50)
+)
+GO
+
+CREATE TABLE Orders (
+Orders_id INT PRIMARY KEY IDENTITY(1,1),
+FK_User_id INT,
+FOREIGN KEY (FK_User_id) REFERENCES Users("User_id"),
+"Status" Varchar(50),
+Created_at VARCHAR(50)
+)
+GO
+
+CREATE TABLE Order_items (
+FK_Order_id INT,
+FOREIGN KEY (FK_Order_id) REFERENCES Orders(Orders_id),
+FK_Product_id INT,
+FOREIGN KEY (FK_Product_id) REFERENCES Products(Product_id),
+Quantity INT
+)
+GO
+
+INSERT INTO Countries
+("name", Continent_name)
+VALUES
+('France', 'Europe'),
+('Turquie', 'Asie'),
+('Zimbabwe', 'Afrique'),
+('Andorre', 'Europe'),
+('Galapagos Island', 'South America')
+GO
+
+DECLARE @Counter INT = 1
+WHILE(@Counter <= 5)
+BEGIN
+	INSERT INTO Users
+	(Full_name, e_mail, gender, DateOfBirth, FK_Country_code, Created_at)
+	VALUES
+	(CONCAT('John', @Counter), (CONCAT('mail',@Counter)), 'Unkonwn', CONCAT(@Counter, '-01-1989'), @Counter, '02-03-2020')
+	SET @Counter = @Counter +1
+END
+GO
+
+SELECT * FROM Users
+GO
+
+SELECT * FROM Countries
+GO
+
+DECLARE @Counter INT = 1
+WHILE (@Counter <= 5)
+BEGIN
+	INSERT INTO Merchants
+	("name", FK_Admin_id, FK_Country_Code, Created_at)
+	VALUES
+	(CONCAT('Merchant', @Counter), @Counter, @Counter, '02-03-2020')
+	SET @Counter = @Counter +1
+END
+GO
+
+SELECT * FROM Merchants
+
+DECLARE @Counter INT = 1
+DECLARE @MarchantId INT = 1
+WHILE (@Counter <= 200)
+BEGIN
+	INSERT INTO Products
+	(FK_Merchant_id, "name", "Status", Created_at)
+	VALUES
+	(@MarchantId, CONCAT('Product', @Counter), 'Available', '02-03-2020')
+	SET @MarchantId = @MarchantId + 1
+	IF (@MarchantId = 6)
+		BEGIN
+			SET @MarchantId = 1
+		END
+	SET @Counter = @Counter + 1
+END
+GO
+
+UPDATE Products SET Price = 50
+SELECT * FROM Products
+GO
+
+INSERT INTO Orders (FK_User_id, "Status", Created_at)
+VALUES
+(1, 'sent', '01-03-2020'),
+(2, 'sent', '01-03-2020'),
+(3, 'sent', '01-03-2020'),
+(4, 'sent', '01-03-2020'),
+(4, 'sent', '01-03-2020')
+GO
+
+SELECT * FROM Orders
+GO
+
+INSERT INTO Order_items (FK_Order_id, FK_Product_id, Quantity)
+VALUES
+(1, 201, 70),
+(2, 202, 70),
+(3, 203, 70),
+(4, 204, 70),
+(5, 205, 70)
+GO
+
+SELECT * FROM Order_items
+GO
+
+-- Each Merchants sold 70 products
+
+SELECT Order_items.Quantity, Merchants.name FROM Order_items
+INNER JOIN Products ON Products.Product_id = Order_items.FK_Product_id
+INNER JOIN Merchants ON Merchants.Merchant_id = Products.FK_Merchant_id
+
+
+CREATE PROCEDURE sp_GetProfit
+	@MerchantId INT
+	AS
+	BEGIN
+		DECLARE @Sum INT
+	    DECLARE @CursorPosition INT
+		DECLARE Cursor_Orders CURSOR SCROLL FOR
+			SELECT "Orders_id"
+			FROM Merchants AS m
+			INNER JOIN Products AS P ON P.FK_Merchant_id = m.Merchant_id
+			INNER JOIN Order_items AS Oi ON Oi.FK_Product_id = P.Product_id
+			inner join Orders AS o ON o.Orders_id = Oi.FK_Order_id
+			INNER JOIN Users AS u ON u."User_id" = O.FK_User_id
+			WHERE m.Merchant_id = @MerchantId
+		OPEN Cursor_Orders
+		FETCH FIRST FROM Cursor_Orders INTO @CursorPosition
+		WHILE @@FETCH_STATUS = 0
+			BEGIN
+				DECLARE @ProductId INT
+				SELECT @ProductId = Product_id
+				FROM Products AS p
+				INNER JOIN Order_items AS oi ON p.Product_id=oi.FK_Product_id
+				inner join Orders AS o ON o.Orders_id = Oi.FK_Order_id
+				INNER JOIN Users AS u ON u."User_id"=o.FK_User_id
+				INNER JOIN Merchants AS m ON u."User_id" = m.FK_Admin_id				
+			    WHERE m.Merchant_id = @MerchantId AND o.Orders_id = @CursorPosition
+				DECLARE @ProductQuantity INT
+				SELECT @ProductQuantity = Quantity
+				FROM Order_items AS oi
+			    inner join Orders AS o ON o.Orders_id = Oi.FK_Order_id
+				INNER JOIN Users AS u ON u."User_id"=o.FK_User_id
+				INNER JOIN Merchants AS m ON u."User_id" = m.FK_Admin_id				
+				WHERE m.Merchant_id = @MerchantId AND o.Orders_id = @CursorPosition
+				DECLARE @ProductPrice INT
+				SELECT @ProductPrice = Price
+				FROM Products AS p				
+				WHERE p.Product_id = @ProductId
+				SET @Sum = @Sum + @ProductQuantity * @ProductPrice
+				FETCH NEXT FROM Cursor_Orders INTO @CursorPosition
+			END
+		CLOSE Cursor_Orders
+		DEALLOCATE Cursor_Orders
+	END
+GO
