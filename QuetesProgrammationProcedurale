@@ -1,0 +1,100 @@
+IF DB_ID('PandemyAlert') IS NOT NULL
+ DROP DATABASE PandemyAlert
+GO
+CREATE DATABASE PandemyAlert
+GO
+
+USE PandemyAlert
+
+CREATE TABLE Country(country_id INT PRIMARY KEY IDENTITY(1,1),
+                     [name] VARCHAR(60) NOT NULL)
+CREATE TABLE City(city_id INT PRIMARY KEY IDENTITY(1,1), 
+                  [name] VARCHAR(60) NOT NULL, 
+                  FK_country_id INT NOT NULL, 
+                  FOREIGN KEY (FK_country_id) REFERENCES Country(country_id))
+CREATE TABLE Person(person_id INT PRIMARY KEY IDENTITY(1,1), 
+                    [name] VARCHAR(60),
+                    is_infected BIT NOT NULL,
+                    FK_city_id INT NOT NULL,
+                    FOREIGN KEY (FK_city_id) REFERENCES City(city_id))
+CREATE TABLE Pharmaceutical(pharmaceutical_id INT PRIMARY KEY IDENTITY(1,1), 
+                            disease VARCHAR(60) NOT NULL, 
+                            [count] INT NOT NULL)
+
+INSERT INTO Country ([name]) VALUES ('France'),
+                                  ('Allemagne'),
+                                  ('Italie'),
+                                  ('Etats-Unis'),
+                                  ('Chine'),
+                                  ('Russie')
+INSERT INTO City([name], FK_Country_id) VALUES ('Paris', 1),('Strasbourg',1),
+                                             ('Berlin', 2),('Cologne', 2),
+                                             ('Rome', 3),('Florence', 3),
+                                             ('Washington', 4),('New York', 4),
+                                             ('Pékin', 5),('Shangaï', 5),
+                                             ('St-Pétersbourg', 6),('Moscou', 6)
+INSERT INTO Pharmaceutical(disease, count) VALUES ('Triméthylaminurie', 50)
+GO
+
+
+DECLARE @IsInfected BIT = 1
+DECLARE @personCounter INT = 1
+DECLARE @counterId INT = 1
+WHILE @personCounter < 121 
+BEGIN
+	INSERT INTO Person([name], is_infected, FK_city_id ) VALUES ('P', 1, @counterId)
+	IF @personCounter %2 = 0
+	BEGIN
+         SELECT [is_infected] FROM Person;
+         UPDATE Person SET [is_infected] = 0 WHERE person_id=@@identity -- va prendre la clé primaire la plus récente qui a été intégrée à la Table
+	END;
+	ELSE
+	BEGIN
+		SELECT [is_infected] FROM Person;
+        UPDATE Person SET [is_infected] = 1 WHERE person_id=@@identity
+	END
+	SET @counterId = @counterId + 1;
+	IF @counterId = 13 
+	BEGIN
+         SET @counterId = 1
+	END;
+	SET @personCounter = @personCounter + 1;
+END
+UPDATE Person SET [name] = CONCAT('P', CONVERT(VARCHAR,(person_id)))
+--UPDATE Person SET is_infected = 0 WHERE person_id %2 = 0
+GO
+
+
+
+DECLARE @InfectedPersonsCountTotal INT = 0
+SELECT @InfectedPersonsCountTotal = (SELECT COUNT(prs.person_id) FROM Person AS prs WHERE prs.is_infected = 1)
+
+
+DECLARE @CursorPosition INT
+DECLARE @InfectedByCountry INT
+DECLARE @idcountry VARCHAR(50)
+DECLARE Cursor_Infected CURSOR SCROLL FOR
+	SELECT COUNT(prs.is_infected) AS InfectedPerson, co.country_id AS Country
+	FROM Person AS prs
+	INNER JOIN City AS ci ON ci.city_id = prs.FK_city_id
+	INNER JOIN Country AS co ON co.country_id = ci.FK_country_id 
+	WHERE prs.is_infected =1
+	GROUP BY co.country_id 
+OPEN Cursor_Infected
+FETCH FIRST FROM Cursor_Infected INTO @InfectedByCountry, @idcountry
+WHILE @@FETCH_STATUS = 0
+	BEGIN
+		IF @InfectedByCountry = @InfectedPersonsCountTotal/6
+			BEGIN 
+				SELECT COUNT(prs.is_infected) AS InfectedPerson, ci.[name] AS City
+				FROM Person AS prs
+				INNER JOIN City AS ci ON ci.city_id = prs.FK_city_id
+				WHERE prs.is_infected =1 AND ci.FK_country_id = @idcountry
+				GROUP BY ci.[name]
+			END
+		FETCH NEXT FROM Cursor_Infected INTO @InfectedByCountry, @idcountry
+	END
+CLOSE Cursor_Infected
+DEALLOCATE Cursor_Infected
+
+
