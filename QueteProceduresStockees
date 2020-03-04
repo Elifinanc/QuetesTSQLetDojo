@@ -1,0 +1,119 @@
+DROP DATABASE IF EXISTS SectTracking
+GO
+CREATE DATABASE SectTracking
+GO
+
+USE SectTracking
+
+CREATE TABLE [Address](address_id INT PRIMARY KEY IDENTITY(1,1),
+                     street_number INT,
+                     street_name VARCHAR(120) NOT NULL)
+CREATE TABLE Sect(sect_id INT PRIMARY KEY IDENTITY(1,1),
+                  name VARCHAR(60) NOT NULL)
+CREATE TABLE Adherent(adherent_id INT PRIMARY KEY IDENTITY(1,1),
+                      name VARCHAR(60))
+CREATE TABLE SectAdherent(sect_adherent_id INT PRIMARY KEY IDENTITY(1,1),
+                          FK_adherent_id INT NOT NULL,
+                          FOREIGN KEY (FK_adherent_id) REFERENCES Adherent(adherent_id),
+                          FK_sect_id INT NOT NULL,
+                          FOREIGN KEY (FK_sect_id) REFERENCES Sect(sect_id))
+GO
+
+INSERT INTO Sect(name) VALUES ('Le Concombre Sacré'), ('Tomatologie'), ('Les abricots volant')
+GO
+
+DECLARE Sect_Cursor CURSOR SCROLL FOR
+   SELECT sect_id FROM Sect
+DECLARE @LastAdherentId INT
+DECLARE @SectId INT
+WHILE (SELECT COUNT(*) FROM SectAdherent) < 30
+   BEGIN
+      OPEN Sect_Cursor
+      FETCH FIRST FROM Sect_Cursor INTO @SectId
+      WHILE @@FETCH_STATUS = 0
+         BEGIN
+            INSERT INTO Adherent(name) VALUES(NULL)
+            SET @LastAdherentId = (SELECT TOP(1) adherent_id FROM Adherent ORDER BY adherent_id DESC)
+            INSERT INTO SectAdherent(FK_adherent_id, FK_sect_id) VALUES (@LastAdherentId, @SectId)
+            FETCH NEXT FROM Sect_Cursor INTO @SectId
+         END
+      CLOSE Sect_Cursor
+   END
+DEALLOCATE Sect_Cursor
+GO
+
+SELECT * FROM SectAdherent
+GO
+
+DROP PROCEDURE IF EXISTS sp_GetAdherentsCountForEachSect
+GO
+
+CREATE PROCEDURE sp_GetAdherentsCountForEachSect
+AS
+BEGIN
+	SELECT COUNT(sa.FK_adherent_id) AS AdherentCount, s.[name] AS SectName
+	FROM SectAdherent AS sa
+	INNER JOIN Sect AS s ON s.sect_id = sa.FK_sect_id
+	GROUP BY s.[name]
+END
+GO
+
+EXECUTE sp_GetAdherentsCountForEachSect
+GO
+
+
+DROP PROCEDURE IF EXISTS sp_PutAllAdherentInAllSect
+GO
+
+CREATE PROCEDURE sp_PutAllAdherentInAllSect
+AS
+BEGIN
+	TRUNCATE TABLE SectAdherent
+
+	DECLARE @SectId2 INT
+	DECLARE Sect_Cursor2 CURSOR SCROLL FOR
+		SELECT sect_id FROM Sect
+	OPEN Sect_Cursor2
+
+	DECLARE @AdherentId INT
+	DECLARE Adherent_Cursor CURSOR SCROLL FOR
+		SELECT adherent_id FROM Adherent
+	OPEN Adherent_Cursor
+
+	FETCH FIRST FROM Sect_Cursor2 INTO @SectId2
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+		FETCH FIRST FROM Adherent_Cursor INTO @AdherentId
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			INSERT INTO SectAdherent(FK_sect_id, FK_adherent_id)
+			VALUES (@SectId2, @AdherentId)
+			FETCH NEXT FROM Adherent_Cursor INTO @AdherentId
+		END 
+		FETCH NEXT FROM Sect_Cursor2 INTO @SectId2
+	END
+	CLOSE Adherent_Cursor
+	DEALLOCATE Adherent_Cursor
+	CLOSE Sect_Cursor2
+	DEALLOCATE Sect_Cursor2
+END
+GO
+
+EXECUTE sp_PutAllAdherentInAllSect
+GO
+
+
+
+CREATE PROCEDURE sp_GetSectCount
+	@SectCount INT OUTPUT
+    AS
+    BEGIN
+		SELECT @SectCount = COUNT(s.sect_id) FROM Sect AS s				
+    END
+GO
+
+DECLARE @ActualSectCount INT
+EXECUTE sp_GetSectCount
+         @SectCount = @ActualSectCount OUTPUT
+PRINT @ActualSectCount
+GO
